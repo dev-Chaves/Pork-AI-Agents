@@ -5,17 +5,22 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 from crewai import Agent, Task, Crew, Process
-from crewai_tools import BaseTool
-from langchain.chat_models import ChatOpenAI  # Integração com LLM via RouteLLM
+from crewai.tools import BaseTool  # Import atualizado do CrewAI Tools
+from langchain_openai import ChatOpenAI  # LangChain OpenAI moderno
 
-# Carrega as variáveis de ambiente
+# Carrega as variáveis de ambiente (.env)
 load_dotenv()
 
+# =========================================
 # Configuração do RouteLLM (Abacus.AI)
+# =========================================
+# Observação: Você pode trocar o modelo conforme seu plano/necessidade.
+# Exemplos de modelos disponíveis via RouteLLM variam ao longo do tempo.
+# Aqui usamos um nome ilustrativo e estável. Se você já usa "gpt-5-mini", mantenha-o.
 llm = ChatOpenAI(
-    model="gpt-5-mini",  # Você pode trocar p/ outra LLM disponível no RouteLLM
-    openai_api_base="https://api.abacus.ai/llm/v1",
-    api_key=os.getenv("ABACUS_API_KEY"),  # chave única da Abacus.AI
+    model="gpt-5-mini",
+    base_url="https://api.abacus.ai/llm/v1",
+    api_key=os.getenv("ABACUS_API_KEY"),
     temperature=0
 )
 
@@ -33,14 +38,19 @@ def persist_data(entry: dict):
             data.append(entry)
             f.seek(0)
             json.dump(data, f, indent=2, ensure_ascii=False)
+            f.truncate()
     except Exception as e:
         print(f"⚠️ Erro ao salvar log: {e}")
 
 
 # --- FERRAMENTA CUSTOM ---
-class ApiMonitoringTools(BaseTool):
+class ApiMonitoringTool(BaseTool):
+    """
+    Ferramenta para requisições aos endpoints de monitoramento da API.
+    Usa API_BASE_URL e MONITORING_API_KEY do .env.
+    """
     name: str = "API Monitoring Tool"
-    description: str = "Ferramenta para requisições aos endpoints de monitoramento da API."
+    description: str = "Faz GET em endpoints de monitoramento e retorna o texto da resposta."
 
     def _run(self, endpoint: str) -> str:
         api_base_url = os.getenv("API_BASE_URL")
@@ -67,17 +77,18 @@ class ApiMonitoringTools(BaseTool):
             return f"Erro geral ao acessar {endpoint}: {e}"
 
 # Instância da ferramenta
-api_tool = ApiMonitoringTools()
+api_tool = ApiMonitoringTool()
 
 
-# --- AGENTES (usando RouteLLM) ---
+# --- AGENTES (RouteLLM) ---
 data_collector_agent = Agent(
     role='Coletor de Métricas da API',
     goal='Coletar dados vitais dos endpoints de saúde.',
     backstory='Robô especializado em requisições HTTP para métricas.',
     tools=[api_tool],
     verbose=True,
-    llm=llm
+    llm=llm,
+    allow_delegation=False
 )
 
 data_analyzer_agent = Agent(
@@ -85,7 +96,8 @@ data_analyzer_agent = Agent(
     goal='Interpretar os dados coletados e detectar anomalias.',
     backstory='Especialista em identificação de falhas em sistemas.',
     verbose=True,
-    llm=llm
+    llm=llm,
+    allow_delegation=False
 )
 
 notification_agent = Agent(
@@ -93,27 +105,30 @@ notification_agent = Agent(
     goal='Transformar os insights técnicos em alertas claros e objetivos.',
     backstory='Profissional em comunicação técnica para times de dev.',
     verbose=True,
-    llm=llm
+    llm=llm,
+    allow_delegation=False
 )
 
 
 # --- TAREFAS ---
 collect_data_task = Task(
     description=(
-        'Busque dados em dois endpoints: `/actuator/health` e `/actuator/metrics/jvm.memory.used`. '
-        'Combine a resposta em JSON unificado.'
+        'Use a ferramenta "API Monitoring Tool" para buscar dados nos endpoints: '
+        '`/actuator/health` e `/actuator/metrics/jvm.memory.used`. '
+        'Combine as respostas em JSON unificado com chaves claras.'
     ),
-    expected_output='JSON com dados brutos health + jvm.memory.used.',
+    expected_output='JSON com dados brutos: {"health": {...}, "jvmMemoryUsed": {...}}',
     agent=data_collector_agent
 )
 
 analyze_data_task = Task(
     description=(
-        'Analise os dados: health deve estar UP. '
-        'Se memória usada > 700MB → levantar alerta. '
-        'Produza resumo curto e objetivo.'
+        'Analise os dados: '
+        '- health.status deve ser "UP". '
+        '- Se memória usada (em bytes) > 700MB (734003200 bytes) → levantar alerta. '
+        'Produza um resumo curto e objetivo em português com conclusões e métricas.'
     ),
-    expected_output='Relatório com status e uso de memória.',
+    expected_output='Relatório com status e uso de memória, incluindo se há alerta.',
     agent=data_analyzer_agent,
     context=[collect_data_task]
 )
@@ -121,10 +136,10 @@ analyze_data_task = Task(
 notify_task = Task(
     description=(
         'Com base na análise, redija a mensagem final de notificação. '
-        'Se tudo ok → mensagem positiva. '
-        'Se falha → alerta claro e conciso.'
+        'Se tudo ok → mensagem positiva com status e uso de memória. '
+        'Se falha/alerta → mensagem de alerta clara, concisa e acionável.'
     ),
-    expected_output='Mensagem final para equipe.',
+    expected_output='Mensagem final para equipe (1-3 parágrafos curtos).',
     agent=notification_agent,
     context=[analyze_data_task]
 )
@@ -134,24 +149,27 @@ notify_task = Task(
 api_monitoring_crew = Crew(
     agents=[data_collector_agent, data_analyzer_agent, notification_agent],
     tasks=[collect_data_task, analyze_data_task, notify_task],
-    process=Process.sequential
+    process=Process.sequential,
+    verbose=True
 )
 
-try:
-    result = api_monitoring_crew.kickoff()
+if __name__ == "__main__":
+    try:
+        print("🚀 Iniciando monitoramento da API...")
+        result = api_monitoring_crew.kickoff()
 
-    log_entry = {"timestamp": datetime.utcnow().isoformat(), "result": result}
-    persist_data(log_entry)
+        log_entry = {"timestamp": datetime.utcnow().isoformat(), "result": str(result)}
+        persist_data(log_entry)
 
-    print("\n\n########################")
-    print("## Resultado Final do Monitoramento:")
-    print("########################\n")
-    print(result)
-    print("📁 Salvo em monitoring_logs.json")
+        print("\n\n########################")
+        print("## Resultado Final do Monitoramento:")
+        print("########################\n")
+        print(result)
+        print("📁 Salvo em monitoring_logs.json")
 
-except Exception as e:
-    print("❌ Erro durante execução:", str(e))
-    persist_data({
-        "timestamp": datetime.utcnow().isoformat(),
-        "error": str(e)
-    })
+    except Exception as e:
+        print("❌ Erro durante execução:", str(e))
+        persist_data({
+            "timestamp": datetime.utcnow().isoformat(),
+            "error": str(e)
+        })

@@ -3,32 +3,47 @@ import json
 import requests
 from datetime import datetime, timezone
 from dotenv import load_dotenv
+from openai import OpenAI
 
 from crewai import Agent, Task, Crew, Process
-from crewai.tools import BaseTool  # Import atualizado do CrewAI Tools
-from langchain_openai import ChatOpenAI  # LangChain OpenAI moderno
+from crewai.tools import BaseTool
 
 # Carrega as variáveis de ambiente (.env)
 load_dotenv()
 
-# Remover variáveis que possam conflitar com o uso do RouteLLM da Abacus
-for var in ["OPENAI_BASE_URL", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY", "LITELLM_BASE_URL"]:
-    if os.environ.get(var):
-        os.environ.pop(var)
-
-abacus_key = os.getenv("ABACUS_API_KEY")
-if not abacus_key:
-    raise RuntimeError("ABACUS_API_KEY não definido no .env")
+# Validação das variáveis essenciais
+required_vars = ["OPENAI_API_KEY", "API_BASE_URL", "MONITORING_API_KEY"]
+missing = [k for k in required_vars if not os.getenv(k)]
+if missing:
+    raise RuntimeError(f"Variáveis ausentes no .env: {', '.join(missing)}")
 
 # =========================================
 # Configuração do RouteLLM (Abacus.AI)
 # =========================================
-llm = ChatOpenAI(
-    model="gpt-4o-mini",  # pode ser qualquer string, mas melhor usar algo válido
-    api_key=os.getenv("ABACUS_API_KEY"),
+client = OpenAI(
     base_url="https://routellm.abacus.ai/v1",
-    temperature=0,
+    api_key=os.getenv("OPENAI_API_KEY"),  # sua chave do Abacus
 )
+
+def route_llm(messages, **kwargs):
+    """
+    Wrapper para usar RouteLLM com CrewAI.
+    Aceita messages e retorna resposta do modelo.
+    """
+    # Se receber string, converte para formato de mensagens
+    if isinstance(messages, str):
+        messages = [{"role": "user", "content": messages}]
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # ou outro modelo válido do RouteLLM
+            messages=messages,
+            temperature=kwargs.get("temperature", 0),
+            max_tokens=kwargs.get("max_tokens", 1000),
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Erro na chamada LLM: {str(e)}"
 
 # === PERSISTÊNCIA DE LOGS ===
 LOG_FILE = "monitoring_logs.json"
@@ -47,7 +62,6 @@ def persist_data(entry: dict):
             f.truncate()
     except Exception as e:
         print(f"⚠️ Erro ao salvar log: {e}")
-
 
 # --- FERRAMENTA CUSTOM ---
 class ApiMonitoringTool(BaseTool):
@@ -71,28 +85,35 @@ class ApiMonitoringTool(BaseTool):
         }
 
         try:
-            url = f"{api_base_url}{endpoint}"
+            # Normaliza URL
+            url = f"{api_base_url.rstrip('/')}/{endpoint.lstrip('/')}"
             response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
-            return response.text  # ou: json.dumps(response.json(), ensure_ascii=False)
+            
+            # Tenta retornar JSON formatado, senão texto puro
+            try:
+                return json.dumps(response.json(), ensure_ascii=False, indent=2)
+            except:
+                return response.text
+                
         except requests.exceptions.Timeout:
             return f"Erro: Timeout ao acessar {endpoint}"
         except requests.exceptions.HTTPError as e:
-            return f"Erro HTTP em {endpoint}: {e}"
+            return f"Erro HTTP em {endpoint}: {response.status_code} - {e}"
         except requests.exceptions.RequestException as e:
             return f"Erro geral ao acessar {endpoint}: {e}"
 
 # Instância da ferramenta
 api_tool = ApiMonitoringTool()
 
-# --- AGENTES (RouteLLM) ---
+# --- AGENTES (usando RouteLLM direto) ---
 data_collector_agent = Agent(
     role='Coletor de Métricas da API',
     goal='Coletar dados vitais dos endpoints de saúde.',
     backstory='Robô especializado em requisições HTTP para métricas.',
     tools=[api_tool],
     verbose=True,
-    llm=llm,
+    llm=route_llm,  # 🔑 usando função wrapper direta
     allow_delegation=False
 )
 
@@ -101,7 +122,7 @@ data_analyzer_agent = Agent(
     goal='Interpretar os dados coletados e detectar anomalias.',
     backstory='Especialista em identificação de falhas em sistemas.',
     verbose=True,
-    llm=llm,
+    llm=route_llm,  # 🔑 usando função wrapper direta
     allow_delegation=False
 )
 
@@ -110,7 +131,7 @@ notification_agent = Agent(
     goal='Transformar os insights técnicos em alertas claros e objetivos.',
     backstory='Profissional em comunicação técnica para times de dev.',
     verbose=True,
-    llm=llm,
+    llm=route_llm,  # 🔑 usando função wrapper direta
     allow_delegation=False
 )
 
@@ -127,7 +148,7 @@ collect_data_task = Task(
 
 analyze_data_task = Task(
     description=(
-        'Analise os dados: '
+        'Analise os dados coletados: '
         '- health.status deve ser "UP". '
         '- Se memória usada (em bytes) > 700MB (734003200 bytes) → levantar alerta. '
         'Produza um resumo curto e objetivo em português com conclusões e métricas.'
@@ -160,10 +181,12 @@ if __name__ == "__main__":
     try:
         print("🚀 Iniciando monitoramento da API...")
 
-        # Falha cedo se variáveis essenciais da ferramenta estiverem faltando
-        missing = [k for k in ["API_BASE_URL", "MONITORING_API_KEY"] if not os.getenv(k)]
-        if missing:
-            raise RuntimeError(f"Variáveis ausentes: {', '.join(missing)}")
+        # Teste rápido da conexão com RouteLLM
+        try:
+            test_response = route_llm("teste de conexão")
+            print("✅ Conexão com RouteLLM OK")
+        except Exception as e:
+            print(f"⚠️ Aviso: Problema na conexão RouteLLM: {e}")
 
         result = api_monitoring_crew.kickoff()
 

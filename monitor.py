@@ -24,7 +24,7 @@ if not abacus_key:
 # Configuração do RouteLLM (Abacus.AI)
 # =========================================
 llm = ChatOpenAI(
-    model="gemini-2.5-flash",
+    model="route-llm",
     base_url="https://routellm.abacus.ai/v1", # essencial
     api_key=abacus_key,                       # essencial
     temperature=0,

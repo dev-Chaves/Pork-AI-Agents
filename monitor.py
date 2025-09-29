@@ -20,9 +20,6 @@ abacus_key = os.getenv("ABACUS_API_KEY")
 if not abacus_key:
     raise RuntimeError("ABACUS_API_KEY não definido no .env")
 
-# Compatibilidade com wrappers que exigem OPENAI_API_KEY
-os.environ["OPENAI_API_KEY"] = abacus_key
-
 # =========================================
 # Configuração do RouteLLM (Abacus.AI)
 # =========================================

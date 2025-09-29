@@ -24,9 +24,9 @@ if not abacus_key:
 # Configuração do RouteLLM (Abacus.AI)
 # =========================================
 llm = ChatOpenAI(
-    model="route-llm",
-    base_url="https://routellm.abacus.ai/v1", # essencial
-    api_key=abacus_key,                       # essencial
+    model="gpt-4o-mini",  # pode ser qualquer string, mas melhor usar algo válido
+    api_key=os.getenv("ABACUS_API_KEY"),
+    base_url="https://routellm.abacus.ai/v1/chat/completions",
     temperature=0,
 )
 

@@ -25,25 +25,41 @@ client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),  # sua chave do Abacus
 )
 
-def route_llm(messages, **kwargs):
+class RouteLLMWrapper:
     """
     Wrapper para usar RouteLLM com CrewAI.
-    Aceita messages e retorna resposta do modelo.
+    Simula um objeto LLM compatível com CrewAI/LangChain.
     """
-    # Se receber string, converte para formato de mensagens
-    if isinstance(messages, str):
-        messages = [{"role": "user", "content": messages}]
-    
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",  # ou outro modelo válido do RouteLLM
-            messages=messages,
-            temperature=kwargs.get("temperature", 0),
-            max_tokens=kwargs.get("max_tokens", 1000),
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Erro na chamada LLM: {str(e)}"
+    def __init__(self, model="gpt-4o-mini", temperature=0):
+        self.model = model
+        self.temperature = temperature
+
+    def __call__(self, messages, **kwargs):
+        return self._generate(messages, **kwargs)
+
+    def invoke(self, messages, **kwargs):
+        # Método usado por LangChain/CrewAI
+        return self._generate(messages, **kwargs)
+
+    def _generate(self, messages, **kwargs):
+        """Método interno para gerar resposta."""
+        # Se receber string, converte para formato de mensagens
+        if isinstance(messages, str):
+            messages = [{"role": "user", "content": messages}]
+        
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=kwargs.get("temperature", self.temperature),
+                max_tokens=kwargs.get("max_tokens", 1000),
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"Erro na chamada LLM: {str(e)}"
+
+# Instância do LLM wrapper
+llm = RouteLLMWrapper(model="gpt-4o-mini", temperature=0)
 
 # === PERSISTÊNCIA DE LOGS ===
 LOG_FILE = "monitoring_logs.json"
@@ -106,14 +122,14 @@ class ApiMonitoringTool(BaseTool):
 # Instância da ferramenta
 api_tool = ApiMonitoringTool()
 
-# --- AGENTES (usando RouteLLM direto) ---
+# --- AGENTES (usando RouteLLM wrapper) ---
 data_collector_agent = Agent(
     role='Coletor de Métricas da API',
     goal='Coletar dados vitais dos endpoints de saúde.',
     backstory='Robô especializado em requisições HTTP para métricas.',
     tools=[api_tool],
     verbose=True,
-    llm=route_llm,  # 🔑 usando função wrapper direta
+    llm=llm,  # 🔑 usando wrapper de classe
     allow_delegation=False
 )
 
@@ -122,7 +138,7 @@ data_analyzer_agent = Agent(
     goal='Interpretar os dados coletados e detectar anomalias.',
     backstory='Especialista em identificação de falhas em sistemas.',
     verbose=True,
-    llm=route_llm,  # 🔑 usando função wrapper direta
+    llm=llm,  # 🔑 usando wrapper de classe
     allow_delegation=False
 )
 
@@ -131,7 +147,7 @@ notification_agent = Agent(
     goal='Transformar os insights técnicos em alertas claros e objetivos.',
     backstory='Profissional em comunicação técnica para times de dev.',
     verbose=True,
-    llm=route_llm,  # 🔑 usando função wrapper direta
+    llm=llm,  # 🔑 usando wrapper de classe
     allow_delegation=False
 )
 
@@ -183,7 +199,7 @@ if __name__ == "__main__":
 
         # Teste rápido da conexão com RouteLLM
         try:
-            test_response = route_llm("teste de conexão")
+            test_response = llm("teste de conexão")
             print("✅ Conexão com RouteLLM OK")
         except Exception as e:
             print(f"⚠️ Aviso: Problema na conexão RouteLLM: {e}")

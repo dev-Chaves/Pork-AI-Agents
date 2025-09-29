@@ -1,7 +1,7 @@
 import os
 import json
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 from crewai import Agent, Task, Crew, Process
@@ -11,21 +11,21 @@ from langchain_openai import ChatOpenAI  # LangChain OpenAI moderno
 # Carrega as variáveis de ambiente (.env)
 load_dotenv()
 
+# Remover variáveis que possam conflitar com o uso do RouteLLM da Abacus
+for var in ["OPENAI_BASE_URL", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY", "LITELLM_BASE_URL"]:
+    if os.environ.get(var):
+        os.environ.pop(var)
+
 abacus_key = os.getenv("ABACUS_API_KEY")
 if not abacus_key:
     raise RuntimeError("ABACUS_API_KEY não definido no .env")
-    
+
+# Compatibilidade com wrappers que exigem OPENAI_API_KEY
 os.environ["OPENAI_API_KEY"] = abacus_key
 
 # =========================================
 # Configuração do RouteLLM (Abacus.AI)
 # =========================================
-# Observação: Você pode trocar o modelo conforme seu plano/necessidade.
-# Exemplos de modelos disponíveis via RouteLLM variam ao longo do tempo.
-# Aqui usamos um nome ilustrativo e estável. Se você já usa "gpt-5-mini", mantenha-o.
-
-os.environ["OPENAI_API_KEY"] = abacus_key
-
 llm = ChatOpenAI(
     model="gpt-5-mini",
     base_url="https://api.abacus.ai/llm/v1",  # essencial
@@ -77,7 +77,7 @@ class ApiMonitoringTool(BaseTool):
             url = f"{api_base_url}{endpoint}"
             response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
-            return response.text
+            return response.text  # ou: json.dumps(response.json(), ensure_ascii=False)
         except requests.exceptions.Timeout:
             return f"Erro: Timeout ao acessar {endpoint}"
         except requests.exceptions.HTTPError as e:
@@ -87,7 +87,6 @@ class ApiMonitoringTool(BaseTool):
 
 # Instância da ferramenta
 api_tool = ApiMonitoringTool()
-
 
 # --- AGENTES (RouteLLM) ---
 data_collector_agent = Agent(
@@ -117,7 +116,6 @@ notification_agent = Agent(
     llm=llm,
     allow_delegation=False
 )
-
 
 # --- TAREFAS ---
 collect_data_task = Task(
@@ -153,7 +151,6 @@ notify_task = Task(
     context=[analyze_data_task]
 )
 
-
 # --- CREW ---
 api_monitoring_crew = Crew(
     agents=[data_collector_agent, data_analyzer_agent, notification_agent],
@@ -165,9 +162,18 @@ api_monitoring_crew = Crew(
 if __name__ == "__main__":
     try:
         print("🚀 Iniciando monitoramento da API...")
+
+        # Falha cedo se variáveis essenciais da ferramenta estiverem faltando
+        missing = [k for k in ["API_BASE_URL", "MONITORING_API_KEY"] if not os.getenv(k)]
+        if missing:
+            raise RuntimeError(f"Variáveis ausentes: {', '.join(missing)}")
+
         result = api_monitoring_crew.kickoff()
 
-        log_entry = {"timestamp": datetime.utcnow().isoformat(), "result": str(result)}
+        log_entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "result": str(result)
+        }
         persist_data(log_entry)
 
         print("\n\n########################")
@@ -179,6 +185,6 @@ if __name__ == "__main__":
     except Exception as e:
         print("❌ Erro durante execução:", str(e))
         persist_data({
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "error": str(e)
         })

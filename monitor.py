@@ -25,7 +25,7 @@ if not abacus_key:
 # =========================================
 llm = ChatOpenAI(
     model="gpt-5-mini",
-    base_url="https://api.abacus.ai/llm/v1",  # essencial
+    base_url="https://routellm.abacus.ai/v1", # essencial
     api_key=abacus_key,                       # essencial
     temperature=0,
 )

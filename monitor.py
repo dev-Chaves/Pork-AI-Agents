@@ -11,17 +11,26 @@ from langchain_openai import ChatOpenAI  # LangChain OpenAI moderno
 # Carrega as variáveis de ambiente (.env)
 load_dotenv()
 
+abacus_key = os.getenv("ABACUS_API_KEY")
+if not abacus_key:
+    raise RuntimeError("ABACUS_API_KEY não definido no .env")
+    
+os.environ["OPENAI_API_KEY"] = abacus_key
+
 # =========================================
 # Configuração do RouteLLM (Abacus.AI)
 # =========================================
 # Observação: Você pode trocar o modelo conforme seu plano/necessidade.
 # Exemplos de modelos disponíveis via RouteLLM variam ao longo do tempo.
 # Aqui usamos um nome ilustrativo e estável. Se você já usa "gpt-5-mini", mantenha-o.
+
+os.environ["OPENAI_API_KEY"] = abacus_key
+
 llm = ChatOpenAI(
     model="gpt-5-mini",
-    base_url="https://api.abacus.ai/llm/v1",
-    api_key=os.getenv("ABACUS_API_KEY"),
-    temperature=0
+    base_url="https://api.abacus.ai/llm/v1",  # essencial
+    api_key=abacus_key,                       # essencial
+    temperature=0,
 )
 
 # === PERSISTÊNCIA DE LOGS ===

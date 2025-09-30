@@ -625,7 +625,7 @@ collect_data_task = Task(
 )
 
 # Agente 2: Analisador de Exceções
-exception_analyzer_prompt = f"""
+exception_analyzer_prompt = """
 Você é um especialista em análise de exceções e erros de APIs.
 Receberá um JSON com dados do Actuator e deve fazer uma análise PROFUNDA de TODAS as exceções.
 
@@ -645,53 +645,53 @@ MÉTRICAS DE SISTEMA:
 - GC pause time (se disponível)
 
 THRESHOLDS:
-- MEMORY_ALERT_MB = {MEMORY_ALERT_MB}
-- CPU_ALERT_PCT = {CPU_ALERT_PCT}
-- ERROR_RATE_SLO_PCT = {ERROR_RATE_SLO_PCT}
-- LATENCY_AVG_SLO_MS = {LATENCY_AVG_SLO_MS}
-- LATENCY_P95_SLO_MS = {LATENCY_P95_SLO_MS}
+- MEMORY_ALERT_MB = """ + str(MEMORY_ALERT_MB) + """
+- CPU_ALERT_PCT = """ + str(CPU_ALERT_PCT) + """
+- ERROR_RATE_SLO_PCT = """ + str(ERROR_RATE_SLO_PCT) + """
+- LATENCY_AVG_SLO_MS = """ + str(LATENCY_AVG_SLO_MS) + """
+- LATENCY_P95_SLO_MS = """ + str(LATENCY_P95_SLO_MS) + """
 
-Retorne EXATAMENTE este JSON:
-{{
+Retorne EXATAMENTE este JSON (substitua os valores entre < >):
+{
   "summary": "resumo executivo",
-  "severity": "INFO|WARN|ALERT|CRITICAL",
-  "exceptions_analysis": {{
-    "total_exceptions": <int>,
-    "exception_types": {{"tipo": count}},
-    "exceptions_by_status": {{"status": count}},
+  "severity": "INFO ou WARN ou ALERT ou CRITICAL",
+  "exceptions_analysis": {
+    "total_exceptions": 0,
+    "exception_types": {"tipo": "count"},
+    "exceptions_by_status": {"status": "count"},
     "most_problematic_endpoints": [
-      {{"endpoint": "uri", "error_count": <int>, "error_types": {{}}}
+      {"endpoint": "uri", "error_count": 0, "error_types": {}}
     ],
-    "error_rate_pct": <float>,
-    "client_errors_4xx": <int>,
-    "server_errors_5xx": <int>
-  }},
-  "performance_analysis": {{
-    "total_requests": <int>,
-    "avg_response_time_ms": <float ou null>,
-    "p95_response_time_ms": <float ou null>,
-    "p99_response_time_ms": <float ou null>,
+    "error_rate_pct": 0.0,
+    "client_errors_4xx": 0,
+    "server_errors_5xx": 0
+  },
+  "performance_analysis": {
+    "total_requests": 0,
+    "avg_response_time_ms": 0.0,
+    "p95_response_time_ms": 0.0,
+    "p99_response_time_ms": 0.0,
     "slowest_endpoints": []
-  }},
-  "system_metrics": {{
-    "memory_used_mb": <int ou null>,
-    "memory_max_mb": <int ou null>,
-    "memory_used_pct": <float ou null>,
-    "cpu_usage_pct": <float ou null>,
-    "threads_live": <int ou null>
-  }},
+  },
+  "system_metrics": {
+    "memory_used_mb": 0,
+    "memory_max_mb": 0,
+    "memory_used_pct": 0.0,
+    "cpu_usage_pct": 0.0,
+    "threads_live": 0
+  },
   "findings": [
-    {{
-      "area": "EXCEPTIONS|PERFORMANCE|MEMORY|CPU",
-      "status": "OK|WARN|ALERT|CRITICAL",
+    {
+      "area": "EXCEPTIONS ou PERFORMANCE ou MEMORY ou CPU",
+      "status": "OK ou WARN ou ALERT ou CRITICAL",
       "metric": "nome",
       "value": "valor",
       "threshold": "limite",
       "details": "explicação"
-    }}
+    }
   ],
   "actions": ["ação 1", "ação 2"]
-}}
+}
 """
 
 exception_analyzer_agent = Agent(

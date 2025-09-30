@@ -72,3 +72,57 @@ O coração do sistema é uma equipe de três agentes de IA, cada um com uma fun
 ├── monitor.py            # O script principal que define e executa os agentes.
 ├── monitoring_logs.json  # (Gerado) Logs das execuções do monitor.
 └── requirements.txt      # Dependências Python do projeto.
+
+## 🛠️ Como Começar
+
+### Pré-requisitos
+
+- Python 3.9+
+- Docker e Docker Compose (recomendado)
+- Um Bot do Telegram e o ID de um Chat para receber as notificações.
+- Acesso a um serviço de LLM (configurado via RouteLLM).
+
+### 1. Configuração do Ambiente
+
+Clone o repositório e crie um arquivo `.env` na raiz do projeto. Use o exemplo abaixo como base:
+
+```env
+# Chave de API para o RouteLLM (ou o provedor de LLM que ele roteia)
+OPENAI_API_KEY="sk-..."
+
+# URL base da API a ser monitorada (com endpoints Actuator)
+API_BASE_URL="[http://sua-api.example.com](http://sua-api.example.com)"
+
+# Chave de API para autenticar nos endpoints de monitoramento (X-API-KEY)
+MONITORING_API_KEY="sua-chave-de-monitoramento"
+
+# --- Telegram (Opcional, mas recomendado) ---
+TELEGRAM_BOT_TOKEN="token-do-seu-bot"
+TELEGRAM_CHAT_ID="id-do-seu-chat"
+
+# --- Thresholds de Alerta (Opcional) ---
+MEMORY_ALERT_MB=700
+CPU_ALERT_PCT=85.0
+ERROR_RATE_SLO_PCT=1.0
+LATENCY_P95_SLO_MS=800
+
+# Constrói a imagem e sobe o container em background
+docker-compose up --build -d
+
+# Para ver os logs em tempo real
+docker-compose logs -f
+
+# Para parar o container
+docker-compose down
+
+# 1. Crie e ative um ambiente virtual
+python -m venv .venv
+source .venv/bin/activate  # No Linux/macOS
+# .\.venv\Scripts\Activate.ps1 # No Windows (PowerShell)
+
+# 2. Instale as dependências
+pip install -r requirements.txt
+
+# 3. Execute o script
+python monitor.py
+

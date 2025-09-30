@@ -1,0 +1,19 @@
+services:
+  monitor:
+    build: .
+    container_name: api-monitor
+    restart: unless-stopped
+    environment:
+      # Le as variáveis de um arquivo .env local (não commitar com chaves!)
+      - TZ=America/Sao_Paulo
+    env_file:
+      - .env
+    volumes:
+      # Persiste os logs no host
+      - ./monitoring_logs.json:/app/monitoring_logs.json
+    # Opcional: healthcheck simples (verifica se o processo está vivo)
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep -q 'python monitor.py'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

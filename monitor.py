@@ -250,7 +250,7 @@ class ApiMonitoringTool(BaseTool):
     description: str = "Faz GET em endpoints de monitoramento e retorna o texto da resposta."
 
     def _run(self, endpoint: str) -> str:
-    return self._get_with_retry(endpoint)
+        return self._get_with_retry(endpoint)
 
     def _get_with_retry(self, endpoint: str, retries: int = 3, timeout: int = 15) -> str:
         api_base_url = os.getenv("API_BASE_URL")

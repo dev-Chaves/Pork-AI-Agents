@@ -1,156 +1,166 @@
-# Pork-AI-Agents — monitor.py
+🐷 Pork-AI-Agents: Monitoramento Inteligente com Agentes de IA
 
-Monitoramento de uma aplicação (Spring Boot Actuator) usando um time de agentes IA com CrewAI e um LLM via RouteLLM (Abacus.AI).
+Este projeto implementa um sistema de monitoramento autônomo para aplicações (especialmente Spring Boot com Actuator), utilizando uma equipe de agentes de IA orquestrada pelo framework CrewAI.
 
-Este repositório contém um único script principal, `monitor.py`, que cria três agentes:
+A solução se conecta a um Large Language Model (LLM) através do RouteLLM da Abacus.AI, permitindo uma análise inteligente e contextual das métricas da aplicação.
 
-- Coletor: consulta endpoints do Actuator e agrupa os dados em um JSON.
-- Analista: interpreta as métricas, aplica thresholds e gera um diagnóstico estruturado (JSON).
-- Notificador: formata uma mensagem curta e acionável a partir da análise.
+Além do monitoramento agendado, o sistema integra-se a um bot do Telegram para enviar alertas e receber comandos, tornando a operação mais interativa e acessível.
 
-O LLM usado no script é configurado para falar com RouteLLM (Abacus.AI) via cliente compatível com OpenAI.
+📜 Tabela de Conteúdos
 
----
+Como Funciona: A Equipe de Agentes
 
-## Conteúdo
+Principais Funcionalidades
 
-- `monitor.py` — script principal.
-- `monitoring_logs.json` — (gerado) arquivo de logs locais em JSON com execuções do monitor.
+Estrutura do Projeto
 
----
+Como Começar
 
-## Requisitos
+Pré-requisitos
 
-- Python 3.9+ recomendado
-- Pacotes Python (exemplos): `crewai`, `requests`, `python-dotenv`, `openai` (usado como client HTTP para RouteLLM).
+Configuração do Ambiente
 
-Instale com pip (PowerShell):
+Executando com Docker
 
-```powershell
-python -m venv .venv; .\.venv\Scripts\Activate.ps1
-pip install crewai requests python-dotenv openai
-```
+Executando Localmente
 
-Se preferir, crie um `requirements.txt` com essas dependências.
+Tecnologias Utilizadas
 
----
+Melhorias Futuras
 
-## Variáveis de ambiente (.env)
+🚀 Como Funciona: A Equipe de Agentes (Crew)
 
-O `monitor.py` espera um arquivo `.env` com, pelo menos, as variáveis abaixo:
+O coração do sistema é uma equipe de três agentes de IA, cada um com uma função específica, que trabalham em sequência para transformar dados brutos em insights acionáveis.
 
-- OPENAI_API_KEY — chave de API usada pelo cliente OpenAI/RouteLLM (pode ser a chave do provedor que você estiver usando via RouteLLM)
-- API_BASE_URL — base URL da API que contém os endpoints do Actuator (ex.: `https://minha-api.example.com`)
-- MONITORING_API_KEY — chave usada para autenticação nas rotas de monitoramento da API (header `X-API-KEY`)
+1. 🤖 Agente Coletor de Dados (Data Collector Agent)
 
-Opções configuráveis (com valores padrão mostrados no código):
+Missão: Acessar os endpoints do Spring Boot Actuator da aplicação-alvo.
 
-- MEMORY_ALERT_MB — (default 700) limite em MB para gerar alerta de memória
-- CPU_ALERT_PCT — (default 85.0) limite em % para CPU
-- ERROR_RATE_SLO_PCT — (default 1.0) limite % de erro aceitável
-- LATENCY_P95_SLO_MS — (default 800) limite em ms para p95 de latência
+Ferramentas: ApiMonitoringTool (faz requisições HTTP com retentativas).
 
-Exemplo de `.env`:
+Resultado: Agrupa informações (saúde, métricas de CPU/memória, traces, etc.) em um JSON estruturado.
 
-```text
-OPENAI_API_KEY=s2_xxx-your-route-llm-key-xxx
-API_BASE_URL=https://minha-api.example.com
-MONITORING_API_KEY=xxxxxxxx-xxxx-xxxx
+2. 🧠 Agente Analista de Dados (Data Analyzer Agent)
+
+Missão: Interpretar o JSON bruto fornecido pelo Coletor.
+
+Inteligência: Utiliza o LLM via RouteLLM para:
+
+Converter métricas (ex: bytes → MB)
+
+Comparar valores com thresholds (SLOs)
+
+Identificar anomalias, gerar diagnóstico completo
+
+Resultado: JSON de análise com severidade (INFO, WARN, ALERT), findings detalhados e ações recomendadas.
+
+3. 📢 Agente Notificador (Notification Agent)
+
+Missão: Traduzir a análise em mensagem clara e humana.
+
+Comunicação: Mensagem formatada para Telegram.
+
+Resultado: Alerta final compreensível pela equipe de desenvolvimento ou SRE.
+
+✨ Principais Funcionalidades
+
+Monitoramento Automatizado: Execuções agendadas (ex.: diariamente às 12:00).
+
+Análise Potencializada por IA: Diagnósticos com contexto, não só alertas crus.
+
+Controle via Telegram:
+
+/run → Executa monitoramento imediato
+
+/status → Verifica se o sistema está online
+
+/logs → Retorna logs da última execução
+
+/config → Mostra thresholds atuais
+
+/help → Lista comandos
+
+Containerizado: Fácil deploy com Docker e Compose.
+
+Persistência de Logs: Saída salva em monitoring_logs.json.
+
+📂 Estrutura do Projeto
+├── .dockerignore         # Arquivos ignorados no Docker
+├── .env                  # Variáveis de ambiente
+├── .gitignore            # Arquivos ignorados no Git
+├── Dockerfile            # Imagem Docker do monitor
+├── README.MD             # Documentação
+├── compose.yaml          # Orquestração com Docker Compose
+├── monitor.py            # Script principal (agentes)
+├── monitoring_logs.json  # Logs das execuções
+└── requirements.txt      # Dependências Python
+
+🛠️ Como Começar
+Pré-requisitos
+
+Python 3.9+
+
+Docker e Docker Compose
+
+Bot do Telegram + Chat ID
+
+Chave de API para algum LLM (via RouteLLM)
+
+1. Configuração do Ambiente
+
+Crie um .env na raiz do projeto:
+
+OPENAI_API_KEY="sk-..."
+API_BASE_URL="http://sua-api.example.com"
+MONITORING_API_KEY="sua-chave-de-monitoramento"
+
+# Telegram (opcional)
+TELEGRAM_BOT_TOKEN="token-do-seu-bot"
+TELEGRAM_CHAT_ID="id-do-seu-chat"
+
+# Thresholds
 MEMORY_ALERT_MB=700
 CPU_ALERT_PCT=85.0
 ERROR_RATE_SLO_PCT=1.0
 LATENCY_P95_SLO_MS=800
-```
 
-Observação importante sobre chaves OpenAI / litellm / variáveis de ambiente
+2. Executando com Docker (Recomendado)
+docker-compose up --build -d    # Sobe container
+docker-compose logs -f          # Logs em tempo real
+docker-compose down             # Para o container
 
-- Se você tiver variáveis como `OPENAI_API_KEY` definidas que apontam para a OpenAI (ou outro serviço), algumas bibliotecas (litellm, openai, langchain) podem tentar autenticar automaticamente ao serem importadas. Isso causa erros como:
+3. Executando Localmente
+# Criar ambiente virtual
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# .\.venv\Scripts\Activate.ps1  # Windows
 
-```
-litellm.AuthenticationError: AuthenticationError: OpenAIException - Incorrect API key provided: s2_5aaac... You can find your API key at https://platform.openai.com/account/api-keys.
-```
+# Instalar dependências
+pip install -r requirements.txt
 
-Para evitar conflitos e garantir que o script use explicitamente seu RouteLLM/Abacus endpoint:
-
-- Verifique o `.env` e remova/ajuste chaves que não deveriam ser lidas (por exemplo, remova chaves OpenAI que pertençam a outro provedor).
-- Se precisar manter múltiplas chaves no mesmo ambiente, carregue/limpe variáveis antes de importar clientes que usam essas variáveis. No `monitor.py` já carregamos `load_dotenv()` no topo, mas se você integrar esse script em um projeto maior, garanta que a limpeza de variáveis ocorra antes de qualquer `import` que inicialize clients.
-
----
-
-## Como rodar
-
-No PowerShell, a sequência mínima:
-
-```powershell
-# ative o virtualenv (se criado anteriormente)
-.\.venv\Scripts\Activate.ps1
-
-# coloque seu .env ao lado de monitor.py
+# Rodar monitor
 python monitor.py
-```
 
-Saída esperada:
+⚙️ Tecnologias Utilizadas
 
-- Logs no console exibindo o progresso dos agentes.
-- Um arquivo `monitoring_logs.json` com um registro da execução.
+CrewAI → Orquestração de agentes de IA
 
----
+RouteLLM (Abacus.AI) → Roteamento inteligente de LLMs
 
-## Comportamento e limites
+OpenAI Python Client → Comunicação com API
 
-- O coletor tenta acessar vários endpoints do Spring Boot Actuator. Se um endpoint não existir, o coletor preenche `null` para aquele campo no JSON.
-- O analisador converte métricas (bytes -> MB, frações -> percentuais) e compara com os thresholds definidos pelas variáveis de ambiente.
-- A notificação condensa a saída em uma mensagem curta e acionável.
+Docker → Containerização
 
----
+Schedule → Agendamento de tarefas
 
-## Depuração do erro litellm/OpenAI que você encontrou
+python-dotenv → Variables de ambiente
 
-Causa provável:
+💡 Melhorias Futuras
 
-- Uma variável de ambiente OPENAI_API_KEY (ou similar) contém uma chave inválida ou da OpenAI e está sendo lida por `openai` / `litellm` / `langchain` em algum ponto da inicialização, provocando a exceção.
+Logging mais robusto (com rotação de arquivos).
 
-Soluções práticas:
+Novas ferramentas de agentes (ex.: consultar doc da API).
 
-1. Garanta que o `.env` contenha a chave correta para RouteLLM (caso a operação passe por um proxy) e que não exista uma outra `OPENAI_API_KEY` no ambiente do sistema (ex.: variáveis do Windows). No PowerShell, verifique com:
+Criar testes unitários para ApiMonitoringTool.
 
-```powershell
-Get-ChildItem Env:OPENAI_API_KEY
-```
-
-Se estiver definida e for de outro provedor, remova temporariamente antes de executar:
-
-```powershell
-Remove-Item Env:OPENAI_API_KEY
-# then run the script
-python monitor.py
-```
-
-2. Se você precisa trabalhar com múltiplas chaves, modifique o código para limpar variáveis indesejadas antes de importar bibliotecas que criam clientes automaticamente. Exemplos de variáveis a revisar/remover: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_API_BASE`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `LITELLM_BASE_URL`.
-
-3. Forçar o cliente do RouteLLM explicitamente (o `monitor.py` já cria `OpenAI(base_url=..., api_key=...)`). Contudo, se alguma outra importação (por bibliotecas de terceiros) já inicializar um cliente OpenAI usando a variável de ambiente, isso causará o erro. Solução: mover/limpar env vars antes dessas importações.
-
----
-
-## Melhorias sugeridas
-
-- Migrar logs para `logging` com rotação (`logging.handlers.RotatingFileHandler`).
-- Tornar thresholds configuráveis por argumentos de linha de comando além do `.env`.
-- Adicionar testes unitários para `ApiMonitoringTool` com `responses` ou `requests-mock`.
-- Usar `requests.Session` com retry/backoff centralizado (o script já tem um retry simples na ferramenta).
-
----
-
-## Próximos passos
-
-Se quiser, posso:
-
-- Gerar um `requirements.txt` e um `setup` rápido para execução.
-- Aplicar as correções no `monitor.py` para limpar variáveis de ambiente antes das importações que inicializam clientes (evita o erro do litellm/OpenAI).
-- Adicionar testes pytest para o `ApiMonitoringTool`.
-
-Informe qual dessas opções prefere que eu implemente a seguir.
-
----
-
-© Projeto Pork-AI-Agents — ferramentas de monitoramento com agentes de IA
+Suporte a múltiplos alvos de monitoramento.

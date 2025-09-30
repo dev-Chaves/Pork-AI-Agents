@@ -3,6 +3,7 @@ import json
 import time
 import math
 import requests
+import schedule
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -20,6 +21,13 @@ required_vars = ["OPENAI_API_KEY", "API_BASE_URL", "MONITORING_API_KEY"]
 missing = [k for k in required_vars if not os.getenv(k)]
 if missing:
     raise RuntimeError(f"Variáveis ausentes no .env: {', '.join(missing)}")
+
+# Configurações do Telegram (opcionais)
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+# Variável para controlar updates já processados
+last_update_id = 0
 
 # Thresholds com defaults razoáveis (você pode ajustar no .env)
 MEMORY_ALERT_MB = int(os.getenv("MEMORY_ALERT_MB", "700"))
@@ -84,6 +92,151 @@ def persist_data(entry: dict):
             f.truncate()
     except Exception as e:
         print(f"⚠️ Erro ao salvar log: {e}")
+
+# =========================
+# Notificação via Telegram
+# =========================
+def send_telegram_notification(message: str, analysis_data: dict = None):
+    """
+    Envia notificação via Telegram com métricas importantes.
+    """
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("⚠️ Telegram não configurado. Pulando notificação.")
+        return False
+    
+    try:
+        # Monta mensagem completa com métricas
+        timestamp = datetime.now().strftime("%d/%m/%Y %H:%M")
+        
+        telegram_message = f"🤖 *Monitor API - {timestamp}*\n\n"
+        telegram_message += message
+        
+        # Adiciona métricas importantes se disponível
+        if analysis_data and isinstance(analysis_data, dict):
+            numbers = analysis_data.get("numbers", {})
+            if numbers:
+                telegram_message += "\n\n📊 *Métricas Importantes:*\n"
+                
+                if numbers.get("memory_used_mb"):
+                    memory_pct = numbers.get("memory_used_pct", 0)
+                    telegram_message += f"• Memória: {numbers['memory_used_mb']}MB ({memory_pct:.1f}%)\n"
+                
+                if numbers.get("cpu_usage_pct"):
+                    telegram_message += f"• CPU: {numbers['cpu_usage_pct']:.1f}%\n"
+                
+                if numbers.get("http_error_rate_pct") is not None:
+                    telegram_message += f"• Taxa de Erro: {numbers['http_error_rate_pct']:.2f}%\n"
+        
+        # Envia via API do Telegram
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        data = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": telegram_message,
+            "parse_mode": "Markdown"
+        }
+        
+        response = requests.post(url, data=data, timeout=10)
+        response.raise_for_status()
+        
+        print("✅ Notificação enviada via Telegram")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Erro ao enviar Telegram: {e}")
+        return False
+
+# =========================
+# Escuta de comandos do Telegram
+# =========================
+def listen_for_commands():
+    """
+    Faz polling no Telegram para ouvir comandos enviados pelo usuário.
+    """
+    global last_update_id
+    
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+    params = {"offset": last_update_id + 1, "timeout": 1}
+    
+    try:
+        response = requests.get(url, params=params, timeout=5)
+        data = response.json()
+
+        if "result" in data and data["result"]:
+            for update in data["result"]:
+                last_update_id = update["update_id"]
+                
+                if "message" in update:
+                    chat_id = update["message"]["chat"]["id"]
+                    text = update["message"].get("text", "").strip()
+                    username = update["message"]["from"].get("username", "Usuário")
+
+                    if str(chat_id) != str(TELEGRAM_CHAT_ID):
+                        continue  # ignora outros chats
+
+                    print(f"📱 Comando recebido de @{username}: {text}")
+
+                    # Processa os comandos
+                    if text == "/status":
+                        send_telegram_notification("✅ Bot está rodando normalmente!")
+                        
+                    elif text == "/run":
+                        send_telegram_notification("🚀 Executando monitoramento sob comando...")
+                        run_monitoring()
+                        
+                    elif text == "/help":
+                        help_msg = (
+                            "📖 *Comandos disponíveis:*\n\n"
+                            "/status - Ver se o bot está online\n"
+                            "/run - Executar monitoramento agora\n"
+                            "/logs - Ver últimos logs\n"
+                            "/config - Ver configurações atuais\n"
+                            "/help - Mostrar esta ajuda"
+                        )
+                        send_telegram_notification(help_msg)
+                        
+                    elif text == "/logs":
+                        try:
+                            if os.path.exists(LOG_FILE):
+                                with open(LOG_FILE, "r", encoding="utf-8") as f:
+                                    logs = json.load(f)
+                                    if logs:
+                                        last_log = logs[-1]
+                                        timestamp = last_log.get("timestamp", "N/A")
+                                        log_msg = f"📋 *Último log:*\n\n⏰ {timestamp}\n\n"
+                                        if "error" in last_log:
+                                            log_msg += f"❌ Erro: {last_log['error']}"
+                                        else:
+                                            log_msg += "✅ Execução bem-sucedida"
+                                        send_telegram_notification(log_msg)
+                                    else:
+                                        send_telegram_notification("📋 Nenhum log encontrado ainda.")
+                            else:
+                                send_telegram_notification("📋 Arquivo de log não existe ainda.")
+                        except Exception as e:
+                            send_telegram_notification(f"❌ Erro ao ler logs: {e}")
+                            
+                    elif text == "/config":
+                        config_msg = (
+                            f"⚙️ *Configurações atuais:*\n\n"
+                            f"• Memória Alert: {MEMORY_ALERT_MB}MB\n"
+                            f"• CPU Alert: {CPU_ALERT_PCT}%\n"
+                            f"• Error Rate SLO: {ERROR_RATE_SLO_PCT}%\n"
+                            f"• Latency SLO: {LATENCY_P95_SLO_MS}ms\n"
+                            f"• Telegram: {'✅ Configurado' if TELEGRAM_BOT_TOKEN else '❌ Não configurado'}"
+                        )
+                        send_telegram_notification(config_msg)
+                        
+                    else:
+                        send_telegram_notification(
+                            f"❓ Comando não reconhecido: `{text}`\n\n"
+                            "Digite /help para ver os comandos disponíveis."
+                        )
+
+    except Exception as e:
+        print(f"⚠️ Erro ao ouvir comandos: {e}")
 
 # =========================
 # Ferramenta de coleta com retry/backoff
@@ -283,7 +436,15 @@ api_monitoring_crew = Crew(
     verbose=True
 )
 
-if __name__ == "__main__":
+# =========================
+# Função principal de monitoramento
+# =========================
+def run_monitoring():
+    """
+    Executa o monitoramento completo e envia notificação via Telegram.
+    """
+    start_time = time.time()
+    
     try:
         print("🚀 Iniciando monitoramento da API...")
 
@@ -294,25 +455,90 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"⚠️ Aviso: Problema na conexão RouteLLM: {e}")
 
+        # Executa o monitoramento
         result = api_monitoring_crew.kickoff()
+        
+        # Calcula tempo de resposta
+        response_time = time.time() - start_time
+        
+        # Tenta extrair dados de análise para métricas detalhadas
+        analysis_data = None
+        try:
+            # Tenta parsear o resultado do analisador se estiver em formato JSON
+            if hasattr(result, 'tasks_output') and len(result.tasks_output) >= 2:
+                analysis_output = str(result.tasks_output[1])
+                analysis_data = json.loads(analysis_output)
+        except:
+            pass
 
-        # Tenta salvar também os dados brutos coletados do primeiro task (se disponível no CrewAI)
-        # Como fallback, salvamos apenas o resultado final.
+        # Salva log com tempo de resposta
         log_entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "result": str(result)
+            "response_time_seconds": round(response_time, 2),
+            "result": str(result),
+            "analysis_data": analysis_data
         }
         persist_data(log_entry)
 
-        print("\n\n########################")
-        print("## Resultado Final do Monitoramento:")
-        print("########################\n")
+        print(f"\n\n########################")
+        print(f"## Resultado Final do Monitoramento:")
+        print(f"## Tempo de resposta: {response_time:.2f}s")
+        print(f"########################\n")
         print(result)
         print("📁 Salvo em monitoring_logs.json")
 
+        # Envia notificação via Telegram
+        notification_message = str(result)
+        if response_time > 30:
+            notification_message = f"⚡ Tempo de resposta alto: {response_time:.1f}s\n\n{notification_message}"
+        else:
+            notification_message = f"⚡ Tempo de resposta: {response_time:.1f}s\n\n{notification_message}"
+            
+        send_telegram_notification(notification_message, analysis_data)
+
     except Exception as e:
-        print("❌ Erro durante execução:", str(e))
+        error_msg = f"❌ Erro durante execução: {str(e)}"
+        print(error_msg)
+        
+        # Salva erro no log
         persist_data({
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "error": str(e)
+            "error": str(e),
+            "response_time_seconds": round(time.time() - start_time, 2)
         })
+        
+        # Notifica erro via Telegram
+        send_telegram_notification(f"🚨 *ERRO no Monitor*\n\n{error_msg}")
+
+# =========================
+# Agendamento e execução
+# =========================
+if __name__ == "__main__":
+    print("🤖 Monitor de API iniciado!")
+    print("📅 Agendado para rodar diariamente às 12:00")
+    
+    # Verifica configuração do Telegram
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+        print("✅ Telegram configurado - comandos disponíveis")
+        print("💬 Envie /help no Telegram para ver os comandos")
+    else:
+        print("⚠️ Telegram não configurado - apenas logs locais")
+    
+    # Agenda execução diária às 12:00
+    schedule.every().day.at("12:00").do(run_monitoring)
+    
+    # Executa uma vez imediatamente para teste (opcional)
+    print("\n🧪 Executando teste inicial...")
+    run_monitoring()
+    
+    print(f"\n⏰ Aguardando próxima execução às 12:00...")
+    print("💡 Pressione Ctrl+C para parar")
+    
+    # Loop principal do agendador + escuta de comandos
+    try:
+        while True:
+            schedule.run_pending()
+            listen_for_commands()  # escuta comandos do Telegram
+            time.sleep(5)  # verifica a cada 5 segundos
+    except KeyboardInterrupt:
+        print("\n👋 Monitor interrompido pelo usuário")

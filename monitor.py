@@ -11,9 +11,9 @@ from openai import OpenAI
 from crewai import Agent, Task, Crew, Process
 from crewai.tools import BaseTool
 
-# =========================
+# ====
 # Carrega variáveis de ambiente
-# =========================
+# ====
 load_dotenv()
 
 # Variáveis essenciais
@@ -31,13 +31,13 @@ last_update_id = 0
 
 # Thresholds com defaults razoáveis (você pode ajustar no .env)
 MEMORY_ALERT_MB = int(os.getenv("MEMORY_ALERT_MB", "700"))
-CPU_ALERT_PCT = float(os.getenv("CPU_ALERT_PCT", "85.0"))      # %
+CPU_ALERT_PCT = float(os.getenv("CPU_ALERT_PCT", "85.0"))    # %
 ERROR_RATE_SLO_PCT = float(os.getenv("ERROR_RATE_SLO_PCT", "1.0"))  # %
 LATENCY_P95_SLO_MS = int(os.getenv("LATENCY_P95_SLO_MS", "800"))
 
-# =========================
+# ====
 # Configuração RouteLLM (Abacus.AI)
-# =========================
+# ====
 client = OpenAI(
     base_url="https://routellm.abacus.ai/v1",
     api_key=os.getenv("OPENAI_API_KEY"),
@@ -74,9 +74,9 @@ class RouteLLMWrapper:
 
 llm = RouteLLMWrapper(model="gpt-4o-mini", temperature=0)
 
-# =========================
+# ====
 # Persistência de logs
-# =========================
+# ====
 LOG_FILE = "monitoring_logs.json"
 
 def persist_data(entry: dict):
@@ -93,9 +93,9 @@ def persist_data(entry: dict):
     except Exception as e:
         print(f"⚠️ Erro ao salvar log: {e}")
 
-# =========================
+# ====
 # Notificação via Telegram
-# =========================
+# ====
 def send_telegram_notification(message: str, analysis_data: dict = None):
     """
     Envia notificação via Telegram com métricas importantes.
@@ -108,14 +108,14 @@ def send_telegram_notification(message: str, analysis_data: dict = None):
         # Monta mensagem completa com métricas
         timestamp = datetime.now().strftime("%d/%m/%Y %H:%M")
         
-        telegram_message = f"🤖 *Monitor API - {timestamp}*\n\n"
+        telegram_message = f"🤖 Monitor API - {timestamp}\n\n"
         telegram_message += message
         
         # Adiciona métricas importantes se disponível
         if analysis_data and isinstance(analysis_data, dict):
             numbers = analysis_data.get("numbers", {})
             if numbers:
-                telegram_message += "\n\n📊 *Métricas Importantes:*\n"
+                telegram_message += "\n\n📊 Métricas Importantes:\n"
                 
                 if numbers.get("memory_used_mb"):
                     memory_pct = numbers.get("memory_used_pct", 0)
@@ -127,15 +127,15 @@ def send_telegram_notification(message: str, analysis_data: dict = None):
                 if numbers.get("http_error_rate_pct") is not None:
                     telegram_message += f"• Taxa de Erro: {numbers['http_error_rate_pct']:.2f}%\n"
         
-        # Envia via API do Telegram
+        # Envia via API do Telegram (sem parse_mode para evitar erros)
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         data = {
             "chat_id": TELEGRAM_CHAT_ID,
             "text": telegram_message,
-            "parse_mode": "Markdown"
+            "disable_web_page_preview": True
         }
         
-        response = requests.post(url, data=data, timeout=10)
+        response = requests.post(url, json=data, timeout=10)
         response.raise_for_status()
         
         print("✅ Notificação enviada via Telegram")
@@ -145,9 +145,9 @@ def send_telegram_notification(message: str, analysis_data: dict = None):
         print(f"❌ Erro ao enviar Telegram: {e}")
         return False
 
-# =========================
+# ====
 # Escuta de comandos do Telegram
-# =========================
+# ====
 def listen_for_commands():
     """
     Faz polling no Telegram para ouvir comandos enviados pelo usuário.
@@ -181,14 +181,14 @@ def listen_for_commands():
                     # Processa os comandos
                     if text == "/status":
                         send_telegram_notification("✅ Bot está rodando normalmente!")
-                        
+                    
                     elif text == "/run":
                         send_telegram_notification("🚀 Executando monitoramento sob comando...")
                         run_monitoring()
-                        
+                    
                     elif text == "/help":
                         help_msg = (
-                            "📖 *Comandos disponíveis:*\n\n"
+                            "📖 Comandos disponíveis:\n\n"
                             "/status - Ver se o bot está online\n"
                             "/run - Executar monitoramento agora\n"
                             "/logs - Ver últimos logs\n"
@@ -196,31 +196,31 @@ def listen_for_commands():
                             "/help - Mostrar esta ajuda"
                         )
                         send_telegram_notification(help_msg)
-                        
+                    
                     elif text == "/logs":
                         try:
                             if os.path.exists(LOG_FILE):
                                 with open(LOG_FILE, "r", encoding="utf-8") as f:
                                     logs = json.load(f)
-                                    if logs:
-                                        last_log = logs[-1]
-                                        timestamp = last_log.get("timestamp", "N/A")
-                                        log_msg = f"📋 *Último log:*\n\n⏰ {timestamp}\n\n"
-                                        if "error" in last_log:
-                                            log_msg += f"❌ Erro: {last_log['error']}"
-                                        else:
-                                            log_msg += "✅ Execução bem-sucedida"
-                                        send_telegram_notification(log_msg)
+                                if logs:
+                                    last_log = logs[-1]
+                                    timestamp = last_log.get("timestamp", "N/A")
+                                    log_msg = f"📋 Último log:\n\n⏰ {timestamp}\n\n"
+                                    if "error" in last_log:
+                                        log_msg += f"❌ Erro: {last_log['error']}"
                                     else:
-                                        send_telegram_notification("📋 Nenhum log encontrado ainda.")
+                                        log_msg += "✅ Execução bem-sucedida"
+                                    send_telegram_notification(log_msg)
+                                else:
+                                    send_telegram_notification("📋 Nenhum log encontrado ainda.")
                             else:
                                 send_telegram_notification("📋 Arquivo de log não existe ainda.")
                         except Exception as e:
                             send_telegram_notification(f"❌ Erro ao ler logs: {e}")
-                            
+                    
                     elif text == "/config":
                         config_msg = (
-                            f"⚙️ *Configurações atuais:*\n\n"
+                            f"⚙️ Configurações atuais:\n\n"
                             f"• Memória Alert: {MEMORY_ALERT_MB}MB\n"
                             f"• CPU Alert: {CPU_ALERT_PCT}%\n"
                             f"• Error Rate SLO: {ERROR_RATE_SLO_PCT}%\n"
@@ -228,19 +228,19 @@ def listen_for_commands():
                             f"• Telegram: {'✅ Configurado' if TELEGRAM_BOT_TOKEN else '❌ Não configurado'}"
                         )
                         send_telegram_notification(config_msg)
-                        
+                    
                     else:
                         send_telegram_notification(
-                            f"❓ Comando não reconhecido: `{text}`\n\n"
+                            f"❓ Comando não reconhecido: {text}\n\n"
                             "Digite /help para ver os comandos disponíveis."
                         )
 
     except Exception as e:
         print(f"⚠️ Erro ao ouvir comandos: {e}")
 
-# =========================
+# ====
 # Ferramenta de coleta com retry/backoff
-# =========================
+# ====
 class ApiMonitoringTool(BaseTool):
     """
     Ferramenta para requisições aos endpoints de monitoramento da API.
@@ -250,7 +250,7 @@ class ApiMonitoringTool(BaseTool):
     description: str = "Faz GET em endpoints de monitoramento e retorna o texto da resposta."
 
     def _run(self, endpoint: str) -> str:
-        return self._get_with_retry(endpoint)
+    return self._get_with_retry(endpoint)
 
     def _get_with_retry(self, endpoint: str, retries: int = 3, timeout: int = 15) -> str:
         api_base_url = os.getenv("API_BASE_URL")
@@ -283,9 +283,9 @@ class ApiMonitoringTool(BaseTool):
 
 api_tool = ApiMonitoringTool()
 
-# =========================
+# ====
 # Agentes aprimorados
-# =========================
+# ====
 
 # Agente 1: Coletor - agora coleta múltiplos endpoints e retorna JSON estrito
 collector_prompt = f"""
@@ -311,10 +311,10 @@ Regras:
   "loggers": <obj ou null>,
   "httptrace": <obj ou null>,
   "metrics": {{
-     "jvm.memory.used": <obj ou null>,
-     "jvm.memory.max": <obj ou null>,
-     "process.cpu.usage": <obj ou null>,
-     "http.server.requests": <obj ou null>
+    "jvm.memory.used": <obj ou null>,
+    "jvm.memory.max": <obj ou null>,
+    "process.cpu.usage": <obj ou null>,
+    "http.server.requests": <obj ou null>
   }}
 }}
 """
@@ -356,18 +356,18 @@ Siga as regras:
   "summary": "texto curto",
   "severity": "INFO|WARN|ALERT|CRITICAL",
   "findings": [
-     {{
-       "area": "HEALTH|MEMORY|CPU|HTTP|DB|LOGGERS|TRACE|RELEASE",
-       "status": "OK|WARN|ALERT",
-       "metric": "nome_da_metrica",
-       "value": "valor_legível",
-       "threshold": "limite_legível",
-       "details": "explicação curta"
-     }}
+    {{
+    "area": "HEALTH|MEMORY|CPU|HTTP|DB|LOGGERS|TRACE|RELEASE",
+    "status": "OK|WARN|ALERT",
+    "metric": "nome_da_metrica",
+    "value": "valor_legível",
+    "threshold": "limite_legível",
+    "details": "explicação curta"
+    }}
   ],
   "actions": [
-     "ação recomendada 1",
-     "ação recomendada 2"
+    "ação recomendada 1",
+    "ação recomendada 2"
   ],
   "numbers": {{
     "memory_used_mb": <int ou null>,
@@ -426,9 +426,9 @@ notify_task = Task(
     context=[analyze_data_task]
 )
 
-# =========================
+# ====
 # Orquestração
-# =========================
+# ====
 api_monitoring_crew = Crew(
     agents=[data_collector_agent, data_analyzer_agent, notification_agent],
     tasks=[collect_data_task, analyze_data_task, notify_task],
@@ -436,9 +436,9 @@ api_monitoring_crew = Crew(
     verbose=True
 )
 
-# =========================
+# ====
 # Função principal de monitoramento
-# =========================
+# ====
 def run_monitoring():
     """
     Executa o monitoramento completo e envia notificação via Telegram.
@@ -480,10 +480,10 @@ def run_monitoring():
         }
         persist_data(log_entry)
 
-        print(f"\n\n########################")
+        print(f"\n\n####")
         print(f"## Resultado Final do Monitoramento:")
         print(f"## Tempo de resposta: {response_time:.2f}s")
-        print(f"########################\n")
+        print(f"####\n")
         print(result)
         print("📁 Salvo em monitoring_logs.json")
 
@@ -493,7 +493,7 @@ def run_monitoring():
             notification_message = f"⚡ Tempo de resposta alto: {response_time:.1f}s\n\n{notification_message}"
         else:
             notification_message = f"⚡ Tempo de resposta: {response_time:.1f}s\n\n{notification_message}"
-            
+        
         send_telegram_notification(notification_message, analysis_data)
 
     except Exception as e:
@@ -508,11 +508,11 @@ def run_monitoring():
         })
         
         # Notifica erro via Telegram
-        send_telegram_notification(f"🚨 *ERRO no Monitor*\n\n{error_msg}")
+        send_telegram_notification(f"🚨 ERRO no Monitor\n\n{error_msg}")
 
-# =========================
+# ====
 # Agendamento e execução
-# =========================
+# ====
 if __name__ == "__main__":
     print("🤖 Monitor de API iniciado!")
     print("📅 Agendado para rodar diariamente às 12:00")
